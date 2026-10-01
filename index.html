@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Desktop Pet & Productivity Companion</title>
+  <!-- Tailwind CSS & FontAwesome -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    /* 页面纯透明免抠无底色 */
+    html, body {
+      background: transparent !important;
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 3px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: rgba(125, 125, 125, 0.35);
+      border-radius: 4px;
+    }
+    .key-cap {
+      transition: all 0.08s ease;
+      box-shadow: 0 2px 0 rgba(0,0,0,0.15);
+    }
+    .key-active {
+      transform: translateY(2px) scale(0.95) !important;
+      filter: brightness(1.2) drop-shadow(0 0 5px rgba(255,255,255,0.8));
+    }
+    @keyframes pawTap {
+      0% { transform: translateY(0); }
+      50% { transform: translateY(5px); }
+      100% { transform: translateY(0); }
+    }
+    .paw-tapping {
+      animation: pawTap 0.1s ease-in-out;
+    }
+    @keyframes floatUp {
+      0% { opacity: 1; transform: translateY(0) scale(0.9); }
+      100% { opacity: 0; transform: translateY(-26px) scale(1.15); }
+    }
+    .float-toast {
+      animation: floatUp 1.2s ease-out forwards;
+    }
+  </style>
+</head>
+<body class="pointer-events-none w-screen h-screen relative m-0 p-0 overflow-hidden">
+
+  <!-- 整体主容器 (默认停靠右下角，支持自由贴边拖拽与穿透控制) -->
+  <div id="companion-app" class="group pointer-events-auto fixed bottom-3 right-3 flex flex-col items-center select-none z-50">
+    
+    <!-- 1. 顶部胶囊工具栏：鼠标悬停在上方时平滑淡入，移开消失 -->
+    <div id="top-toolbar" class="w-full bg-[#181a26]/90 backdrop-blur-md border border-slate-700/70 rounded-full px-3.5 py-1.5 flex items-center justify-between shadow-xl mb-1 text-slate-200 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity duration-300 pointer-events-none group-hover:pointer-events-auto">
+      <div class="flex items-center gap-1.5">
+        <div id="drag-handle" class="cursor-move text-slate-400 hover:text-amber-400 px-0.5 text-xs" title="按住拖拽位置">
+          <i class="fa-solid fa-grip-vertical"></i>
+        </div>
+        <span id="level-badge" class="text-amber-400 font-bold text-[11px] font-mono">Lv.1</span>
+        <span id="pet-name-display" class="font-medium text-[11px] text-slate-100 max-w-[80px] truncate cursor-pointer hover:underline" title="点击改昵称">快乐松鼠</span>
+      </div>
+
+      <div class="flex items-center gap-2.5 text-xs">
+        <button id="btn-feed" class="text-pink-400 hover:text-pink-300 hover:scale-110 transition-transform p-0.5" title="投喂小宠">
+          <i class="fa-solid fa-heart text-xs"></i>
+        </button>
+        <button id="btn-wardrobe" class="text-amber-300 hover:text-amber-200 hover:scale-110 transition-transform p-0.5" title="宠物/饰品/透明度/色彩定制">
+          <i class="fa-solid fa-palette text-xs"></i>
+        </button>
+        <button id="btn-games" class="text-purple-400 hover:text-purple-300 hover:scale-110 transition-transform p-0.5" title="摸鱼小游戏">
+          <i class="fa-solid fa-gamepad text-xs"></i>
+        </button>
+        <button id="btn-mute" class="text-slate-300 hover:text-white hover:scale-110 transition-transform p-0.5" title="音效开关">
+          <i id="mute-icon" class="fa-solid fa-volume-high text-xs"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- 飘字 Toast 容器 -->
+    <div id="toast-wrapper" class="absolute top-8 pointer-events-none z-50 flex flex-col items-center"></div>
+
+    <!-- 2. 完全免抠立体的桌宠矢量层 (无任何背景边框) -->
+    <div class="relative w-36 h-32 flex items-center justify-center cursor-pointer transition-transform" id="pet-touch-zone" title="摸摸小宠">
+      <div id="accessory-layer" class="absolute top-1 pointer-events-none z-20"></div>
+      <div id="pet-svg-container" class="w-full h-full flex items-center justify-center filter drop-shadow-[0_8px_14px_rgba(0,0,0,0.35)]"></div>
+    </div>
+
+    <!-- 3. 悬空代表性机械小键盘 (Tab, A, S, D, Enter, Ctrl, Alt, SPACE) -->
+    <div id="mechanical-keyboard" class="relative z-20 -mb-3 bg-[#f8ede3] border border-[#e6d5c3] p-1.5 rounded-xl shadow-md flex flex-col gap-1 w-[205px] transition-opacity duration-200">
+      <div class="flex items-center justify-between gap-1">
+        <div id="key-tab" class="key-cap bg-[#dbeafe] text-[#1d4ed8] text-[8px] font-bold px-1.5 py-0.5 rounded border border-blue-200 font-mono">Tab</div>
+        <div id="key-a" class="key-cap bg-[#fce7f3] text-[#be185d] text-[8px] font-bold px-1.5 py-0.5 rounded border border-pink-200 font-mono">A</div>
+        <div id="key-s" class="key-cap bg-[#fef3c7] text-[#b45309] text-[8px] font-bold px-1.5 py-0.5 rounded border border-amber-200 font-mono">S</div>
+        <div id="key-d" class="key-cap bg-[#dcfce7] text-[#15803d] text-[8px] font-bold px-1.5 py-0.5 rounded border border-green-200 font-mono">D</div>
+        <div id="key-enter" class="key-cap bg-[#fed7aa] text-[#c2410c] text-[8px] font-bold px-2 py-0.5 rounded border border-orange-200 font-mono flex-1 text-center">Enter ↵</div>
+      </div>
+      <div class="flex items-center justify-between gap-1">
+        <div id="key-ctrl" class="key-cap bg-[#f3e8ff] text-[#7e22ce] text-[8px] font-bold px-1.5 py-0.5 rounded border border-purple-200 font-mono">Ctrl</div>
+        <div id="key-alt" class="key-cap bg-[#e0e7ff] text-[#4338ca] text-[8px] font-bold px-1.5 py-0.5 rounded border border-indigo-200 font-mono">Alt</div>
+        <div id="key-space" class="key-cap bg-[#cffafe] text-[#0e7490] text-[8px] font-bold px-2.5 py-0.5 rounded border border-cyan-200 font-mono flex-1 text-center">SPACE ␣</div>
+      </div>
+    </div>
+
+    <!-- 4. 键盘无缝衔接的桌面待办清单 (支持右下角自由拖动调节尺寸) -->
+    <div id="desk-todo-board" class="relative rounded-2xl shadow-xl overflow-hidden pt-4 px-3 pb-3 flex flex-col transition-all duration-200" style="width: 290px; min-width: 240px; max-width: 480px; min-height: 140px;">
+      
+      <!-- 状态栏与折叠按钮（已替换 Bongo Style 为小宠昵称） -->
+      <div class="flex items-center justify-between text-[10px] pb-1.5 border-b font-mono px-0.5" id="desk-status-bar">
+        <div class="flex items-center gap-1.5">
+          <span>🐾</span>
+          <span id="pet-desk-nickname" class="font-bold truncate max-w-[85px]">快乐松鼠</span>
+          <span class="opacity-40">|</span>
+          <span id="stat-hits">0 Hits</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="flex items-center gap-1">
+            <span>🌰</span>
+            <span id="stat-fullness" class="font-semibold">饱腹 85%</span>
+          </div>
+          <button id="btn-toggle-desk" class="p-0.5 text-[11px] hover:scale-110 transition-transform" title="展开/收起待办清单">
+            <i id="desk-toggle-icon" class="fa-solid fa-chevron-up"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- 经验进度槽 -->
+      <div class="w-full bg-black/10 dark:bg-black/40 h-1.5 rounded-full overflow-hidden my-2 border border-black/10">
+        <div id="exp-progress-bar" class="h-full bg-gradient-to-r from-amber-400 via-rose-400 to-pink-500 rounded-full transition-all duration-300" style="width: 35%"></div>
+      </div>
+
+      <!-- 待办清单核心内容 -->
+      <div id="todo-content" class="flex-1 flex flex-col gap-2 overflow-hidden">
+        <!-- 分类 Tab -->
+        <div id="tab-container" class="flex items-center justify-around p-1 rounded-xl text-[11px] font-medium">
+          <button class="tab-btn active px-2.5 py-0.5 rounded-lg font-bold transition-all" data-tab="today">
+            今日 <span id="count-today" class="text-[9px] px-1 rounded-full font-mono">0</span>
+          </button>
+          <button class="tab-btn px-2.5 py-0.5 rounded-lg transition-all" data-tab="recurring">
+            每日习惯 <span id="count-recurring" class="text-[9px] px-1 rounded-full font-mono">0</span>
+          </button>
+          <button class="tab-btn px-2.5 py-0.5 rounded-lg transition-all" data-tab="upcoming">
+            待发生 <span id="count-upcoming" class="text-[9px] px-1 rounded-full font-mono">0</span>
+          </button>
+        </div>
+
+        <!-- 任务列表容器 (自适应拉伸高度) -->
+        <div id="task-list-container" class="flex-1 overflow-y-auto custom-scroll space-y-1.5 pr-0.5 min-h-[50px] max-h-[320px]"></div>
+
+        <!-- 添加任务表单 -->
+        <form id="add-task-form" class="flex flex-col gap-1 p-2 rounded-xl border">
+          <div class="flex items-center gap-1.5">
+            <input id="task-input" type="text" placeholder="+ 新增待办事项..." class="flex-1 text-[11px] px-2 py-1 rounded-lg focus:outline-none transition-colors" required>
+            <button type="submit" id="btn-add-task-submit" class="text-[11px] px-2 py-1 rounded-lg font-medium transition-colors shrink-0">
+              添加
+            </button>
+          </div>
+          <div class="flex items-center justify-between text-[9px] px-1 pt-0.5">
+            <div class="flex items-center gap-1">
+              <i class="fa-regular fa-calendar opacity-70"></i>
+              <input id="task-date-input" type="date" class="bg-transparent border-0 text-[9px] focus:ring-0 p-0 cursor-pointer">
+            </div>
+            <label class="flex items-center gap-1 cursor-pointer">
+              <input id="task-recurring-check" type="checkbox" class="rounded w-3 h-3 cursor-pointer">
+              <span>每日重复</span>
+            </label>
+          </div>
+        </form>
+      </div>
+
+      <!-- 右下角自由缩放手柄 (Resize Handle) -->
+      <div id="resize-handle" class="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize flex items-end justify-end p-0.5 z-30 opacity-40 hover:opacity-100 transition-opacity" title="按住拖拽调节清单大小">
+        <svg viewBox="0 0 10 10" class="w-2.5 h-2.5 fill-current">
+          <circle cx="8" cy="8" r="1.2"/>
+          <circle cx="8" cy="4" r="1.2"/>
+          <circle cx="4" cy="8" r="1.2"/>
+        </svg>
+      </div>
+
+    </div>
+
+    <!-- 5. 换装、形象、透明度与【清单颜色定制】Modal -->
+    <div id="modal-wardrobe" class="hidden absolute inset-0 z-50 bg-[#161420]/95 backdrop-blur-md rounded-2xl p-3.5 border border-slate-700/80 flex flex-col text-slate-200 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-700 pb-1.5 mb-2">
+        <h3 class="font-bold text-xs flex items-center gap-1.5 text-amber-400">
+          <i class="fa-solid fa-sliders"></i> 宠物、饰品与偏好定制
+        </h3>
+        <button class="btn-close-modal text-slate-400 hover:text-white text-xs"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="overflow-y-auto custom-scroll flex-1 space-y-2.5 text-xs pr-1">
+        <div>
+          <label class="block text-[10px] text-slate-400 mb-1 font-medium">宠物形象</label>
+          <div class="grid grid-cols-3 gap-1.5" id="pet-picker-grid"></div>
+        </div>
+        <div>
+          <label class="block text-[10px] text-slate-400 mb-1 font-medium">头顶饰品</label>
+          <div class="grid grid-cols-4 gap-1.5" id="hat-picker-grid"></div>
+        </div>
+        <div>
+          <label class="block text-[10px] text-slate-400 mb-1 font-medium">桌面清单颜色主题</label>
+          <div class="grid grid-cols-5 gap-1.5" id="color-theme-grid"></div>
+        </div>
+
+        <!-- 透明度滑块设置 -->
+        <div class="bg-slate-800/80 p-2 rounded-xl border border-slate-700/60">
+          <div class="flex items-center justify-between text-[10px] text-slate-300 mb-1 font-medium">
+            <span>清单与键盘透明度</span>
+            <span id="opacity-val-text" class="font-mono text-amber-400 font-bold">100%</span>
+          </div>
+          <input id="opacity-slider" type="range" min="30" max="100" value="100" class="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500">
+          <div class="flex justify-between text-[8px] text-slate-500 font-mono mt-0.5">
+            <span>30% 半透防遮挡</span>
+            <span>100% 完全不透明</span>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-[10px] text-slate-400 mb-1 font-medium">小宠昵称</label>
+          <div class="flex gap-1.5">
+            <input id="pet-nickname-input" type="text" class="flex-1 bg-slate-800 border border-slate-700 text-xs px-2 py-1 rounded text-white focus:outline-none focus:border-amber-400" maxlength="8">
+            <button id="btn-save-nickname" class="bg-amber-600 hover:bg-amber-500 text-white px-2 py-1 rounded text-[11px]">保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. 休闲小游戏 Modal (微型扫雷 & 摸鱼跳一跳) -->
+    <div id="modal-games" class="hidden absolute inset-0 z-50 bg-[#161420]/95 backdrop-blur-md rounded-2xl p-3 border border-slate-700/80 flex flex-col text-slate-200 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-700 pb-1.5 mb-2">
+        <div class="flex gap-2">
+          <button id="tab-game-mine" class="text-xs font-bold text-amber-400 border-b-2 border-amber-400 pb-0.5">微型扫雷</button>
+          <button id="tab-game-jump" class="text-xs font-bold text-slate-400 pb-0.5">摸鱼跳一跳</button>
+        </div>
+        <button class="btn-close-modal text-slate-400 hover:text-white text-xs"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="flex-1 flex flex-col items-center justify-center relative overflow-hidden">
+        <!-- 扫雷面板 -->
+        <div id="panel-minesweeper" class="flex flex-col items-center gap-1.5 w-full">
+          <div class="flex items-center justify-between w-[190px] text-[10px] text-slate-300 font-mono px-1">
+            <span>💣 <span id="mine-count">5</span></span>
+            <button id="btn-reset-mine" class="bg-slate-700 hover:bg-slate-600 px-2 py-0.5 rounded text-white text-[9px]">重置</button>
+            <span>⏱️ <span id="mine-timer">0</span>s</span>
+          </div>
+          <div id="mine-grid" class="grid grid-cols-6 gap-1 bg-slate-800 p-1.5 rounded-lg border border-slate-700 select-none"></div>
+        </div>
+
+        <!-- 跳跃跑酷面板 -->
+        <div id="panel-jumprunner" class="hidden flex-col items-center w-full">
+          <div class="flex justify-between w-full px-2 text-[10px] text-slate-400 font-mono mb-1">
+            <span>按空格或点击跳跃</span>
+            <span>得分: <span id="jump-score" class="text-amber-400 font-bold">0</span></span>
+          </div>
+          <canvas id="jumpCanvas" width="260" height="120" class="bg-slate-900 border border-slate-700 rounded-lg cursor-pointer"></canvas>
+          <button id="btn-start-jump" class="mt-2 bg-amber-600 hover:bg-amber-500 text-white text-xs px-3 py-1 rounded">开始游戏</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // 1. 本地存储与桌面色彩主题配置
+    const STORAGE_KEY = 'desktop_pet_free_v7';
+    const TODAY_STR = new Date().toISOString().split('T')[0];
+
+    const DESK_THEMES = [
+      {
+        id: 'walnut',
+        name: '经典胡桃木',
+        isLight: false,
+        style: 'background: linear-gradient(180deg, #714631 0%, #5c3724 60%, #452718 100%); border: 2px solid #3c2214; color: #fff8eb;',
+        tabBg: 'bg-black/30',
+        activeTab: 'bg-white/20 text-white',
+        inactiveTab: 'text-white/60 hover:text-white',
+        borderCol: 'border-white/10',
+        inputBg: 'bg-black/40 text-white placeholder-white/40 border-white/10',
+        btnSubmit: 'bg-white/25 hover:bg-white/35 text-white',
+        cardItem: 'bg-black/30 border-white/10 text-white/90',
+        cardDone: 'bg-black/15 border-white/5 text-white/30',
+        tagBg: 'bg-black/40 text-white/70'
+      },
+      {
+        id: 'obsidian',
+        name: '深邃暗夜黑',
+        isLight: false,
+        style: 'background: linear-gradient(180deg, #242938 0%, #1a1e2b 60%, #11131c 100%); border: 2px solid #0d0f17; color: #f1f5f9;',
+        tabBg: 'bg-black/40',
+        activeTab: 'bg-indigo-600/70 text-white',
+        inactiveTab: 'text-slate-400 hover:text-white',
+        borderCol: 'border-slate-700/60',
+        inputBg: 'bg-slate-900/60 text-white placeholder-slate-500 border-slate-700/50',
+        btnSubmit: 'bg-indigo-600/80 hover:bg-indigo-500 text-white',
+        cardItem: 'bg-slate-900/40 border-slate-800 text-slate-200',
+        cardDone: 'bg-slate-900/20 border-slate-900 text-slate-600',
+        tagBg: 'bg-slate-800 text-slate-400'
+      },
+      {
+        id: 'cream_milk',
+        name: '奶油暖白',
+        isLight: true,
+        style: 'background: linear-gradient(180deg, #fffdf8 0%, #fbf4ea 60%, #f4eae0 100%); border: 2px solid #e8dbce; color: #443224;',
+        tabBg: 'bg-amber-100/60',
+        activeTab: 'bg-white text-amber-900 shadow-2xs',
+        inactiveTab: 'text-amber-800/60 hover:text-amber-900',
+        borderCol: 'border-amber-900/10',
+        inputBg: 'bg-white/90 text-amber-950 placeholder-amber-800/35 border-amber-900/10',
+        btnSubmit: 'bg-amber-700/80 hover:bg-amber-800 text-white',
+        cardItem: 'bg-white/80 border-amber-900/10 text-amber-950 shadow-2xs',
+        cardDone: 'bg-amber-50/50 border-amber-900/5 text-amber-900/35',
+        tagBg: 'bg-amber-100/80 text-amber-800'
+      },
+      {
+        id: 'sakura_mist',
+        name: '轻柔樱粉',
+        isLight: true,
+        style: 'background: linear-gradient(180deg, #fff5f7 0%, #fce8ed 60%, #fadce4 100%); border: 2px solid #f2c7d2; color: #582b36;',
+        tabBg: 'bg-rose-100/60',
+        activeTab: 'bg-white text-rose-800 shadow-2xs',
+        inactiveTab: 'text-rose-700/60 hover:text-rose-900',
+        borderCol: 'border-rose-900/10',
+        inputBg: 'bg-white/90 text-rose-950 placeholder-rose-800/35 border-rose-900/10',
+        btnSubmit: 'bg-rose-600 hover:bg-rose-500 text-white',
+        cardItem: 'bg-white/80 border-rose-900/10 text-rose-950 shadow-2xs',
+        cardDone: 'bg-rose-50/50 border-rose-900/5 text-rose-900/35',
+        tagBg: 'bg-rose-100/80 text-rose-800'
+      },
+      {
+        id: 'sea_salt',
+        name: '淡雅海盐',
+        isLight: true,
+        style: 'background: linear-gradient(180deg, #f3f9fb 0%, #e3f2f7 60%, #d4e9f0 100%); border: 2px solid #bcdbe6; color: #223c46;',
+        tabBg: 'bg-sky-100/60',
+        activeTab: 'bg-white text-sky-900 shadow-2xs',
+        inactiveTab: 'text-sky-800/60 hover:text-sky-950',
+        borderCol: 'border-sky-900/10',
+        inputBg: 'bg-white/90 text-sky-950 placeholder-sky-800/35 border-sky-900/10',
+        btnSubmit: 'bg-sky-600 hover:bg-sky-500 text-white',
+        cardItem: 'bg-white/80 border-sky-900/10 text-sky-950 shadow-2xs',
+        cardDone: 'bg-sky-50/50 border-sky-900/5 text-sky-900/35',
+        tagBg: 'bg-sky-100/80 text-sky-800'
+      }
+    ];
+
+    let state = {
+      petIndex: 2,
+      nickname: '快乐松鼠',
+      accessoryIndex: 0,
+      themeId: 'walnut',
+      boardWidth: 290,
+      boardHeight: 280,
+      opacity: 100, // 默认 100% 透明度
+      level: 1,
+      exp: 15,
+      hitCount: 0,
+      fullness: 85,
+      isMuted: false,
+      isDeskCollapsed: false,
+      currentTab: 'today',
+      lastActiveDate: TODAY_STR,
+      tasks: [
+        { id: 1, text: '每天喝满 8 杯水', type: 'recurring', isRecurring: true, done: false, date: TODAY_STR },
+        { id: 2, text: '上午完成核心代码编写', type: 'today', isRecurring: false, done: false, date: TODAY_STR },
+        { id: 3, text: '下周技术复盘会准备', type: 'upcoming', isRecurring: false, done: false, date: '2026-10-05' }
+      ]
+    };
+
+    function loadState() {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try { Object.assign(state, JSON.parse(saved)); } catch (e) {}
+      }
+      checkAndRefreshDaily();
+    }
+
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    function checkAndRefreshDaily() {
+      const today = new Date().toISOString().split('T')[0];
+      if (state.lastActiveDate !== today) {
+        state.tasks.forEach(t => {
+          if (t.isRecurring) t.done = false;
+        });
+        state.lastActiveDate = today;
+        saveState();
+      }
+    }
+    loadState();
+
+    // 2. 饰品列表
+    const ACCESSORIES = [
+      { id: 'none', name: '无', svg: '' },
+      { id: 'crown', name: '皇冠', svg: '<svg class="w-7 h-7 drop-shadow" viewBox="0 0 40 40"><polygon points="8,30 32,30 36,14 26,22 20,8 14,22 4,14" fill="#fbbf24" stroke="#b45309" stroke-width="2"/><circle cx="20" cy="8" r="2.5" fill="#f43f5e"/><circle cx="4" cy="14" r="2" fill="#3b82f6"/><circle cx="36" cy="14" r="2" fill="#10b981"/></svg>' },
+      { id: 'flower', name: '红花', svg: '<svg class="w-6 h-6 drop-shadow" viewBox="0 0 40 40"><circle cx="20" cy="14" r="6" fill="#f43f5e"/><circle cx="26" cy="20" r="6" fill="#f43f5e"/><circle cx="20" cy="26" r="6" fill="#f43f5e"/><circle cx="14" cy="20" r="6" fill="#f43f5e"/><circle cx="20" cy="20" r="4.5" fill="#fef08a"/></svg>' },
+      { id: 'grad', name: '学士帽', svg: '<svg class="w-7 h-7 drop-shadow" viewBox="0 0 40 40"><polygon points="20,10 38,18 20,26 2,18" fill="#1e293b" stroke="#0f172a" stroke-width="1.5"/><rect x="12" y="24" width="16" height="7" rx="3" fill="#334155"/><line x1="32" y1="20" x2="35" y2="30" stroke="#f59e0b" stroke-width="2"/></svg>' }
+    ];
+
+    // 3. 6 款手绘矢量宠物模型
+    const PETS = [
+      {
+        id: 'cat_round',
+        name: '侧坐糯米猫',
+        render: (leftDown, rightDown) => `
+          <svg viewBox="0 0 120 100" class="w-full h-full">
+            <path d="M78 72 C92 72 104 60 102 44 C100 38 94 40 94 45 C95 55 86 64 76 66 Z" fill="#ffe2e8" stroke="#3b1d11" stroke-width="2.2"/>
+            <path d="M88 48 C94 52 94 56 86 60" stroke="#f472b6" stroke-width="1.8" fill="none"/>
+            <ellipse cx="58" cy="62" rx="34" ry="24" fill="#ffffff" stroke="#3b1d11" stroke-width="2.5"/>
+            <polygon points="34,42 24,18 46,32" fill="#ffffff" stroke="#3b1d11" stroke-width="2.2"/>
+            <polygon points="66,32 86,18 78,42" fill="#ffffff" stroke="#3b1d11" stroke-width="2.2"/>
+            <circle cx="56" cy="46" r="28" fill="#ffffff" stroke="#3b1d11" stroke-width="2.5"/>
+            <ellipse cx="44" cy="44" rx="3.2" ry="4" fill="#1e1b18"/><circle cx="45" cy="42.5" r="1.2" fill="#fff"/>
+            <ellipse cx="68" cy="44" rx="3.2" ry="4" fill="#1e1b18"/><circle cx="69" cy="42.5" r="1.2" fill="#fff"/>
+            <path d="M52 50 Q56 53 60 50" fill="none" stroke="#3b1d11" stroke-width="1.8"/>
+            <ellipse cx="44" cy="${leftDown ? 76 : 71}" rx="6" ry="4.5" fill="#ffffff" stroke="#3b1d11" stroke-width="2" class="${leftDown ? 'paw-tapping' : ''}"/>
+            <ellipse cx="68" cy="${rightDown ? 76 : 71}" rx="6" ry="4.5" fill="#ffffff" stroke="#3b1d11" stroke-width="2" class="${rightDown ? 'paw-tapping' : ''}"/>
+          </svg>`
+      },
+      {
+        id: 'cat_peach',
+        name: '桃耳委屈猫',
+        render: (leftDown, rightDown) => `
+          <svg viewBox="0 0 120 100" class="w-full h-full">
+            <ellipse cx="60" cy="65" rx="34" ry="22" fill="#ffffff" stroke="#3b1d11" stroke-width="2.5"/>
+            <path d="M30 45 C20 32 30 18 44 30 Z" fill="#fba677" stroke="#3b1d11" stroke-width="2.2"/>
+            <path d="M90 45 C100 32 90 18 76 30 Z" fill="#fba677" stroke="#3b1d11" stroke-width="2.2"/>
+            <ellipse cx="60" cy="46" rx="33" ry="26" fill="#ffffff" stroke="#3b1d11" stroke-width="2.5"/>
+            <circle cx="46" cy="44" r="4.2" fill="#1e1b18"/><circle cx="47.5" cy="42.5" r="1.4" fill="#ffffff"/>
+            <circle cx="74" cy="44" r="4.2" fill="#1e1b18"/><circle cx="75.5" cy="42.5" r="1.4" fill="#ffffff"/>
+            <path d="M57 52 Q60 48 63 52" fill="none" stroke="#3b1d11" stroke-width="2"/>
+            <ellipse cx="46" cy="${leftDown ? 76 : 71}" rx="6.5" ry="4.5" fill="#ffffff" stroke="#3b1d11" stroke-width="2"/>
+            <ellipse cx="74" cy="${rightDown ? 76 : 71}" rx="6.5" ry="4.5" fill="#ffffff" stroke="#3b1d11" stroke-width="2"/>
+          </svg>`
+      },
+      {
+        id: 'corgi_joy',
+        name: '快乐松鼠',
+        render: (leftDown, rightDown) => `
+          <svg viewBox="0 0 120 100" class="w-full h-full">
+            <path d="M78 68 C90 68 108 64 102 44 C96 28 82 34 84 46 C86 54 78 62 70 65 Z" fill="#d97724" stroke="#451a03" stroke-width="2.6"/>
+            <line x1="78" y1="20" x2="88" y2="16" stroke="#ea580c" stroke-width="2.2" stroke-linecap="round"/>
+            <line x1="82" y1="26" x2="94" y2="24" stroke="#ea580c" stroke-width="2.2" stroke-linecap="round"/>
+            <line x1="80" y1="32" x2="92" y2="34" stroke="#ea580c" stroke-width="2.2" stroke-linecap="round"/>
+            <ellipse cx="58" cy="65" rx="27" ry="19" fill="#d97724" stroke="#451a03" stroke-width="2.6"/>
+            <ellipse cx="58" cy="66" rx="16" ry="12" fill="#fffbeb"/>
+            <path d="M36 34 L40 18 C46 16 52 24 48 34 Z" fill="#d97724" stroke="#451a03" stroke-width="2.4"/>
+            <path d="M39 28 L41 20 C44 19 48 24 46 29 Z" fill="#fed7aa"/>
+            <path d="M80 34 L76 18 C70 16 64 24 68 34 Z" fill="#d97724" stroke="#451a03" stroke-width="2.4"/>
+            <path d="M77 28 L75 20 C72 19 68 24 70 29 Z" fill="#fed7aa"/>
+            <circle cx="58" cy="43" r="25" fill="#d97724" stroke="#451a03" stroke-width="2.6"/>
+            <ellipse cx="58" cy="48" rx="16" ry="11" fill="#fffbeb"/>
+            <ellipse cx="47" cy="38" rx="4.2" ry="4.8" fill="#260f03"/><circle cx="48.5" cy="36" r="1.6" fill="#ffffff"/><circle cx="46" cy="40" r="0.8" fill="#ffffff"/>
+            <ellipse cx="69" cy="38" rx="4.2" ry="4.8" fill="#260f03"/><circle cx="70.5" cy="36" r="1.6" fill="#ffffff"/><circle cx="68" cy="40" r="0.8" fill="#ffffff"/>
+            <ellipse cx="58" cy="42" rx="3.2" ry="2.2" fill="#260f03"/>
+            <path d="M52 45 Q58 52 64 45" fill="none" stroke="#451a03" stroke-width="2" stroke-linecap="round"/>
+            <path d="M55 47 Q58 53 61 47" fill="#fb7185" stroke="#451a03" stroke-width="1.4"/>
+            <rect x="42" y="${leftDown ? 72 : 67}" width="9" height="12" rx="4.5" fill="#fffbeb" stroke="#451a03" stroke-width="2.2" class="${leftDown ? 'paw-tapping' : ''}"/>
+            <line x1="45" y1="${leftDown ? 79 : 74}" x2="45" y2="${leftDown ? 83 : 78}" stroke="#451a03" stroke-width="1.5"/>
+            <line x1="48" y1="${leftDown ? 79 : 74}" x2="48" y2="${leftDown ? 83 : 78}" stroke="#451a03" stroke-width="1.5"/>
+            <rect x="65" y="${rightDown ? 72 : 67}" width="9" height="12" rx="4.5" fill="#fffbeb" stroke="#451a03" stroke-width="2.2" class="${rightDown ? 'paw-tapping' : ''}"/>
+            <line x1="68" y1="${rightDown ? 79 : 74}" x2="68" y2="${rightDown ? 83 : 78}" stroke="#451a03" stroke-width="1.5"/>
+            <line x1="71" y1="${rightDown ? 79 : 74}" x2="71" y2="${rightDown ? 83 : 78}" stroke="#451a03" stroke-width="1.5"/>
+          </svg>`
+      },
+      {
+        id: 'dog_droop',
+        name: '呆萌垂耳狗',
+        render: (leftDown, rightDown) => `
+          <svg viewBox="0 0 120 100" class="w-full h-full">
+            <ellipse cx="58" cy="66" rx="24" ry="18" fill="#fef08a" stroke="#451a03" stroke-width="2.2"/>
+            <path d="M36 34 C26 34 24 54 32 60 C38 64 42 48 40 38 Z" fill="#9a3412" stroke="#451a03" stroke-width="2"/>
+            <path d="M80 34 C90 34 92 54 84 60 C78 64 74 48 76 38 Z" fill="#9a3412" stroke="#451a03" stroke-width="2"/>
+            <circle cx="58" cy="42" r="23" fill="#fef08a" stroke="#451a03" stroke-width="2.3"/>
+            <circle cx="48" cy="39" r="3.5" fill="#292524"/><circle cx="49" cy="37.5" r="1.2" fill="#fff"/>
+            <circle cx="68" cy="39" r="3.5" fill="#292524"/><circle cx="69" cy="37.5" r="1.2" fill="#fff"/>
+            <ellipse cx="58" cy="45" rx="3.5" ry="2.5" fill="#292524"/>
+            <ellipse cx="46" cy="${leftDown ? 74 : 70}" rx="5.5" ry="4" fill="#ffffff" stroke="#451a03" stroke-width="2"/>
+            <ellipse cx="70" cy="${rightDown ? 74 : 70}" rx="5.5" ry="4" fill="#ffffff" stroke="#451a03" stroke-width="2"/>
+          </svg>`
+      },
+      {
+        id: 'bot_tank',
+        name: '履带小机',
+        render: (leftDown, rightDown) => `
+          <svg viewBox="0 0 120 100" class="w-full h-full">
+            <circle cx="58" cy="10" r="3.5" fill="#ef4444" stroke="#431407" stroke-width="1.5"/>
+            <line x1="58" y1="20" x2="58" y2="12" stroke="#431407" stroke-width="2.5"/>
+            <rect x="24" y="44" width="12" height="34" rx="6" fill="#fed7aa" stroke="#431407" stroke-width="2.2"/>
+            <rect x="80" y="44" width="12" height="34" rx="6" fill="#fed7aa" stroke="#431407" stroke-width="2.2"/>
+            <rect x="36" y="20" width="44" height="52" rx="16" fill="#fde047" stroke="#431407" stroke-width="2.5"/>
+            <rect x="42" y="28" width="32" height="18" rx="8" fill="#fef9c3" stroke="#431407" stroke-width="2"/>
+            <circle cx="50" cy="37" r="2.8" fill="#431407"/><circle cx="66" cy="37" r="2.8" fill="#431407"/>
+            <ellipse cx="46" cy="${leftDown ? 75 : 71}" rx="5" ry="4" fill="#fdba74" stroke="#431407" stroke-width="2"/>
+            <ellipse cx="70" cy="${rightDown ? 75 : 71}" rx="5" ry="4" fill="#fdba74" stroke="#431407" stroke-width="2"/>
+          </svg>`
+      },
+      {
+        id: 'bot_retro',
+        name: '铁皮乐乐',
+        render: (leftDown, rightDown) => `
+          <svg viewBox="0 0 120 100" class="w-full h-full">
+            <circle cx="62" cy="6" r="3" fill="#f97316"/>
+            <path d="M58 20 C54 12 62 8 62 6" fill="none" stroke="#431407" stroke-width="2.5"/>
+            <path d="M38 38 C38 24 78 24 78 38 Z" fill="#ffffff" stroke="#431407" stroke-width="2.2"/>
+            <circle cx="48" cy="32" r="3" fill="#431407"/><circle cx="68" cy="32" r="3" fill="#431407"/>
+            <path d="M38 42 L78 42 C78 64 68 70 58 70 C48 70 38 64 38 42 Z" fill="#fde047" stroke="#431407" stroke-width="2.2"/>
+            <ellipse cx="40" cy="${leftDown ? 69 : 65}" rx="5" ry="3.5" fill="#fde047" stroke="#431407" stroke-width="2"/>
+            <ellipse cx="76" cy="${rightDown ? 69 : 65}" rx="5" ry="3.5" fill="#fde047" stroke="#431407" stroke-width="2"/>
+          </svg>`
+      }
+    ];
+
+    // 4. Web Audio 机械键盘音效引擎
+    const AudioEngine = {
+      ctx: null,
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioContext();
+        }
+      },
+      playKey() {
+        if (state.isMuted) return;
+        this.init();
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(360 + Math.random() * 80, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(120, this.ctx.currentTime + 0.04);
+        gain.gain.setValueAtTime(0.16, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.04);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.04);
+      },
+      playFanfare() {
+        if (state.isMuted) return;
+        this.init();
+        [523.25, 659.25, 783.99, 1046.5].forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0.12, this.ctx.currentTime + idx * 0.07);
+          gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + idx * 0.07 + 0.15);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(this.ctx.currentTime + idx * 0.07);
+          osc.stop(this.ctx.currentTime + idx * 0.07 + 0.15);
+        });
+      }
+    };
+
+    // 5. DOM 节点引用
+    const petSvgContainer = document.getElementById('pet-svg-container');
+    const accessoryLayer = document.getElementById('accessory-layer');
+    const petNameDisplay = document.getElementById('pet-name-display');
+    const petDeskNickname = document.getElementById('pet-desk-nickname');
+    const levelBadge = document.getElementById('level-badge');
+    const expProgressBar = document.getElementById('exp-progress-bar');
+    const statHits = document.getElementById('stat-hits');
+    const statFullness = document.getElementById('stat-fullness');
+    const toastWrapper = document.getElementById('toast-wrapper');
+    const taskListContainer = document.getElementById('task-list-container');
+    const todoContent = document.getElementById('todo-content');
+    const deskToggleIcon = document.getElementById('desk-toggle-icon');
+    const muteIcon = document.getElementById('mute-icon');
+    const deskTodoBoard = document.getElementById('desk-todo-board');
+    const mechanicalKeyboard = document.getElementById('mechanical-keyboard');
+    const deskStatusBar = document.getElementById('desk-status-bar');
+    const tabContainer = document.getElementById('tab-container');
+    const taskInput = document.getElementById('task-input');
+    const btnAddTaskSubmit = document.getElementById('btn-add-task-submit');
+    const addTaskForm = document.getElementById('add-task-form');
+    const opacitySlider = document.getElementById('opacity-slider');
+    const opacityValText = document.getElementById('opacity-val-text');
+
+    let pawToggle = false;
+
+    function renderPet(leftDown = false, rightDown = false) {
+      petSvgContainer.innerHTML = PETS[state.petIndex].render(leftDown, rightDown);
+      accessoryLayer.innerHTML = ACCESSORIES[state.accessoryIndex].svg;
+    }
+
+    function applyOpacity() {
+      const op = (state.opacity !== undefined ? state.opacity : 100) / 100;
+      deskTodoBoard.style.opacity = op;
+      mechanicalKeyboard.style.opacity = Math.max(0.4, op); // 键盘联动半透明
+      if (opacitySlider) opacitySlider.value = state.opacity;
+      if (opacityValText) opacityValText.innerText = `${state.opacity}%`;
+    }
+
+    function applyDeskTheme() {
+      const theme = DESK_THEMES.find(t => t.id === state.themeId) || DESK_THEMES[0];
+      deskTodoBoard.setAttribute('style', `${theme.style}; width: ${state.boardWidth}px; min-height: ${state.isDeskCollapsed ? '45px' : state.boardHeight + 'px'}; opacity: ${state.opacity / 100};`);
+      
+      deskStatusBar.className = `flex items-center justify-between text-[10px] pb-1.5 border-b ${theme.borderCol} font-mono px-0.5`;
+      tabContainer.className = `flex items-center justify-around p-1 rounded-xl text-[11px] font-medium ${theme.tabBg}`;
+      addTaskForm.className = `flex flex-col gap-1 p-2 rounded-xl border ${theme.borderCol} ${theme.tabBg}`;
+      taskInput.className = `flex-1 text-[11px] px-2 py-1 rounded-lg focus:outline-none transition-colors border ${theme.inputBg}`;
+      btnAddTaskSubmit.className = `text-[11px] px-2 py-1 rounded-lg font-medium transition-colors shrink-0 ${theme.btnSubmit}`;
+
+      document.querySelectorAll('.tab-btn').forEach(b => {
+        if (b.dataset.tab === state.currentTab) {
+          b.className = `tab-btn active px-2.5 py-0.5 rounded-lg font-bold transition-all ${theme.activeTab}`;
+        } else {
+          b.className = `tab-btn px-2.5 py-0.5 rounded-lg transition-all ${theme.inactiveTab}`;
+        }
+      });
+    }
+
+    function showToast(text) {
+      const toast = document.createElement('div');
+      toast.className = 'float-toast text-[10px] font-bold text-amber-300 bg-black/80 border border-amber-500/40 px-2 py-0.5 rounded-full shadow-md mb-1';
+      toast.innerText = text;
+      toastWrapper.appendChild(toast);
+      setTimeout(() => toast.remove(), 1200);
+    }
+
+    function addExp(pts) {
+      state.exp += pts;
+      const need = state.level * 40;
+      if (state.exp >= need) {
+        state.level += 1;
+        state.exp -= need;
+        showToast(`🎉 升级至 Lv.${state.level}!`);
+        AudioEngine.playFanfare();
+      }
+      saveState();
+      updateUI();
+    }
+
+    function updateUI() {
+      levelBadge.innerText = `Lv.${state.level}`;
+      petNameDisplay.innerText = state.nickname;
+      petDeskNickname.innerText = state.nickname;
+      statHits.innerText = `${state.hitCount} Hits`;
+      statFullness.innerText = `饱腹 ${state.fullness}%`;
+      const need = state.level * 40;
+      const pct = Math.min(100, Math.round((state.exp / need) * 100));
+      expProgressBar.style.width = `${pct}%`;
+
+      muteIcon.className = state.isMuted 
+        ? 'fa-solid fa-volume-xmark text-red-400 text-xs' 
+        : 'fa-solid fa-volume-high text-xs';
+
+      if (state.isDeskCollapsed) {
+        todoContent.classList.add('hidden');
+        deskToggleIcon.className = 'fa-solid fa-chevron-down';
+      } else {
+        todoContent.classList.remove('hidden');
+        deskToggleIcon.className = 'fa-solid fa-chevron-up';
+      }
+      applyDeskTheme();
+      applyOpacity();
+    }
+
+    // 6. 待办事项逻辑
+    function getFilteredTasks() {
+      const today = new Date().toISOString().split('T')[0];
+      return state.tasks.filter(t => {
+        if (state.currentTab === 'recurring') return t.isRecurring;
+        if (state.currentTab === 'today') {
+          if (t.isRecurring) return false;
+          if (t.type === 'today') return true;
+          if (t.date && t.date <= today) return true;
+          return false;
+        }
+        if (state.currentTab === 'upcoming') {
+          if (t.isRecurring) return false;
+          return t.date && t.date > today;
+        }
+        return false;
+      });
+    }
+
+    function renderTasks() {
+      taskListContainer.innerHTML = '';
+      const list = getFilteredTasks();
+      const today = new Date().toISOString().split('T')[0];
+      const theme = DESK_THEMES.find(t => t.id === state.themeId) || DESK_THEMES[0];
+
+      if (list.length === 0) {
+        taskListContainer.innerHTML = `<div class="text-center opacity-40 py-3 text-[10px]">没有待办事项，放轻松~</div>`;
+      } else {
+        list.forEach(task => {
+          const item = document.createElement('div');
+          item.className = `flex items-center justify-between p-1.5 rounded-lg border transition-all ${
+            task.done ? theme.cardDone : theme.cardItem
+          }`;
+
+          let badge = '';
+          if (task.date) {
+            const isToday = task.date === today;
+            badge = `<span class="text-[8px] px-1 py-0.2 rounded font-mono ${isToday ? 'bg-emerald-600/20 text-emerald-600 font-bold' : theme.tagBg}">${isToday ? '今日到期' : task.date}</span>`;
+          }
+
+          item.innerHTML = `
+            <div class="flex items-center gap-1.5 flex-1 min-w-0 cursor-pointer">
+              <input type="checkbox" ${task.done ? 'checked' : ''} class="task-checkbox rounded text-amber-600 focus:ring-0 cursor-pointer w-3.5 h-3.5">
+              <span class="truncate text-[11px] ${task.done ? 'line-through opacity-40' : ''}">${task.text}</span>
+              ${badge}
+              ${task.isRecurring ? '<i class="fa-solid fa-repeat text-[8px] text-amber-500" title="每日重复"></i>' : ''}
+            </div>
+            <button class="delete-btn opacity-40 hover:opacity-100 hover:text-rose-500 p-0.5 ml-1 transition-colors text-[9px]">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          `;
+
+          item.querySelector('.task-checkbox').addEventListener('change', (e) => {
+            task.done = e.target.checked;
+            if (task.done) {
+              addExp(25);
+              showToast('✅ 任务完成 +25 Exp');
+              AudioEngine.playFanfare();
+            }
+            saveState();
+            renderTasks();
+            updateUI();
+          });
+
+          item.querySelector('.delete-btn').addEventListener('click', () => {
+            state.tasks = state.tasks.filter(t => t.id !== task.id);
+            saveState();
+            renderTasks();
+            updateUI();
+          });
+
+          taskListContainer.appendChild(item);
+        });
+      }
+
+      const todayCount = state.tasks.filter(t => !t.isRecurring && (!t.date || t.date <= today) && !t.done).length;
+      const recurCount = state.tasks.filter(t => t.isRecurring && !t.done).length;
+      const upCount = state.tasks.filter(t => !t.isRecurring && t.date && t.date > today && !t.done).length;
+      document.getElementById('count-today').innerText = todayCount;
+      document.getElementById('count-recurring').innerText = recurCount;
+      document.getElementById('count-upcoming').innerText = upCount;
+    }
+
+    // 7. 击键互动与全局事件处理核心
+    function triggerHit(keyId = null) {
+      state.hitCount++;
+      AudioEngine.playKey();
+      pawToggle = !pawToggle;
+      renderPet(pawToggle, !pawToggle);
+
+      if (keyId) {
+        const keyEl = document.getElementById(keyId);
+        if (keyEl) {
+          keyEl.classList.add('key-active');
+          setTimeout(() => keyEl.classList.remove('key-active'), 110);
+        }
+      } else {
+        const keys = ['key-tab', 'key-a', 'key-s', 'key-d', 'key-enter', 'key-ctrl', 'key-alt', 'key-space'];
+        const randomKey = document.getElementById(keys[Math.floor(Math.random() * keys.length)]);
+        if (randomKey) {
+          randomKey.classList.add('key-active');
+          setTimeout(() => randomKey.classList.remove('key-active'), 90);
+        }
+      }
+
+      setTimeout(() => renderPet(false, false), 110);
+      updateUI();
+      if (state.hitCount % 100 === 0) {
+        addExp(10);
+        showToast('⌨️ 击键大师 +10 Exp');
+      }
+    }
+
+    function mapKeyToId(k) {
+      if (!k) return null;
+      const lower = k.toLowerCase();
+      if (k === 'Tab') return 'key-tab';
+      if (lower === 'a') return 'key-a';
+      if (lower === 's') return 'key-s';
+      if (lower === 'd') return 'key-d';
+      if (k === 'Enter') return 'key-enter';
+      if (k === 'Control') return 'key-ctrl';
+      if (k === 'Alt') return 'key-alt';
+      if (k === ' ') return 'key-space';
+      return null;
+    }
+
+    // 监听 Electron 传来的操作系统底层全局按键与鼠标点击
+    const electron = window.require ? window.require('electron') : null;
+    if (electron && electron.ipcRenderer) {
+      electron.ipcRenderer.on('global-input-event', (event, data) => {
+        if (data.type === 'key') {
+          triggerHit(mapKeyToId(data.key));
+        } else if (data.type === 'click') {
+          triggerHit(null);
+        }
+      });
+    }
+
+    window.addEventListener('keydown', (e) => {
+      triggerHit(mapKeyToId(e.key));
+    });
+
+    // 8. 顶部控制栏与折叠
+    document.getElementById('btn-feed').addEventListener('click', () => {
+      state.fullness = Math.min(100, state.fullness + 10);
+      addExp(15);
+      showToast('🌰 饱腹度提升! +15 Exp');
+      AudioEngine.playFanfare();
+    });
+
+    document.getElementById('btn-mute').addEventListener('click', () => {
+      state.isMuted = !state.isMuted;
+      updateUI();
+      saveState();
+    });
+
+    document.getElementById('btn-toggle-desk').addEventListener('click', () => {
+      state.isDeskCollapsed = !state.isDeskCollapsed;
+      updateUI();
+      saveState();
+    });
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.currentTab = btn.dataset.tab;
+        renderTasks();
+        applyDeskTheme();
+      });
+    });
+
+    const taskDateInput = document.getElementById('task-date-input');
+    taskDateInput.value = TODAY_STR;
+    document.getElementById('add-task-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = taskInput.value.trim();
+      if (!text) return;
+
+      const isRecurring = document.getElementById('task-recurring-check').checked;
+      const chosenDate = taskDateInput.value || TODAY_STR;
+      let type = 'today';
+      if (isRecurring) type = 'recurring';
+      else if (chosenDate > TODAY_STR) type = 'upcoming';
+
+      state.tasks.push({
+        id: Date.now(),
+        text: text,
+        type: type,
+        isRecurring: isRecurring,
+        done: false,
+        date: isRecurring ? TODAY_STR : chosenDate
+      });
+
+      taskInput.value = '';
+      saveState();
+      renderTasks();
+      updateUI();
+      showToast('📝 待办已记入');
+    });
+
+    // 9. 形象、饰品、透明度与主题定制
+    const modalWardrobe = document.getElementById('modal-wardrobe');
+    document.getElementById('btn-wardrobe').addEventListener('click', () => {
+      populateWardrobeGrid();
+      document.getElementById('pet-nickname-input').value = state.nickname;
+      opacitySlider.value = state.opacity;
+      opacityValText.innerText = `${state.opacity}%`;
+      modalWardrobe.classList.remove('hidden');
+    });
+
+    document.getElementById('pet-name-display').addEventListener('click', () => {
+      document.getElementById('btn-wardrobe').click();
+    });
+
+    // 透明度滑动实时反馈与存储
+    opacitySlider.addEventListener('input', (e) => {
+      state.opacity = parseInt(e.target.value);
+      applyOpacity();
+      saveState();
+    });
+
+    document.getElementById('btn-save-nickname').addEventListener('click', () => {
+      const val = document.getElementById('pet-nickname-input').value.trim();
+      if (val) {
+        state.nickname = val;
+        saveState();
+        updateUI();
+        showToast('✨ 昵称已保存');
+      }
+    });
+
+    function populateWardrobeGrid() {
+      const petGrid = document.getElementById('pet-picker-grid');
+      petGrid.innerHTML = '';
+      PETS.forEach((p, idx) => {
+        const btn = document.createElement('button');
+        btn.className = `p-1 rounded-xl border flex flex-col items-center gap-0.5 ${
+          state.petIndex === idx ? 'bg-amber-600/30 border-amber-400' : 'bg-slate-800 border-slate-700'
+        }`;
+        btn.innerHTML = `
+          <div class="w-8 h-8 pointer-events-none">${p.render(false, false)}</div>
+          <span class="text-[9px] truncate max-w-full">${p.name}</span>
+        `;
+        btn.onclick = () => {
+          state.petIndex = idx;
+          renderPet(false, false);
+          saveState();
+          populateWardrobeGrid();
+        };
+        petGrid.appendChild(btn);
+      });
+
+      const hatGrid = document.getElementById('hat-picker-grid');
+      hatGrid.innerHTML = '';
+      ACCESSORIES.forEach((acc, idx) => {
+        const btn = document.createElement('button');
+        btn.className = `p-1 rounded-xl border flex flex-col items-center justify-center h-12 ${
+          state.accessoryIndex === idx ? 'bg-amber-600/30 border-amber-400' : 'bg-slate-800 border-slate-700'
+        }`;
+        btn.innerHTML = `
+          <div class="h-5 flex items-center justify-center">${acc.svg || '<span class="text-xs text-slate-400">无</span>'}</div>
+          <span class="text-[8px] mt-0.5">${acc.name}</span>
+        `;
+        btn.onclick = () => {
+          state.accessoryIndex = idx;
+          renderPet(false, false);
+          saveState();
+          populateWardrobeGrid();
+        };
+        hatGrid.appendChild(btn);
+      });
+
+      const colorGrid = document.getElementById('color-theme-grid');
+      colorGrid.innerHTML = '';
+      DESK_THEMES.forEach((theme) => {
+        const btn = document.createElement('button');
+        btn.className = `h-10 rounded-xl border flex flex-col items-center justify-center transition-all ${
+          state.themeId === theme.id ? 'border-amber-400 ring-2 ring-amber-400/50 scale-105' : 'border-slate-600/80 hover:scale-102'
+        }`;
+        btn.setAttribute('style', theme.style);
+        btn.innerHTML = `<span class="text-[8px] font-bold ${theme.isLight ? 'text-slate-800' : 'text-white'} drop-shadow-xs">${theme.name.slice(0, 2)}</span>`;
+        btn.title = theme.name;
+        btn.onclick = () => {
+          state.themeId = theme.id;
+          applyDeskTheme();
+          renderTasks();
+          saveState();
+          populateWardrobeGrid();
+          showToast(`🎨 切换: ${theme.name}`);
+        };
+        colorGrid.appendChild(btn);
+      });
+    }
+
+    // 10. 小游戏模块
+    const modalGames = document.getElementById('modal-games');
+    document.getElementById('btn-games').addEventListener('click', () => {
+      modalGames.classList.remove('hidden');
+      initMinesweeper();
+    });
+
+    document.querySelectorAll('.btn-close-modal').forEach(b => {
+      b.addEventListener('click', () => {
+        modalWardrobe.classList.add('hidden');
+        modalGames.classList.add('hidden');
+      });
+    });
+
+    document.getElementById('tab-game-mine').addEventListener('click', () => {
+      document.getElementById('tab-game-mine').className = 'text-xs font-bold text-amber-400 border-b-2 border-amber-400 pb-0.5';
+      document.getElementById('tab-game-jump').className = 'text-xs font-bold text-slate-400 pb-0.5';
+      document.getElementById('panel-minesweeper').classList.remove('hidden');
+      document.getElementById('panel-jumprunner').classList.add('hidden');
+      initMinesweeper();
+    });
+
+    document.getElementById('tab-game-jump').addEventListener('click', () => {
+      document.getElementById('tab-game-jump').className = 'text-xs font-bold text-amber-400 border-b-2 border-amber-400 pb-0.5';
+      document.getElementById('tab-game-mine').className = 'text-xs font-bold text-slate-400 pb-0.5';
+      document.getElementById('panel-minesweeper').classList.add('hidden');
+      document.getElementById('panel-jumprunner').classList.remove('hidden');
+    });
+
+    // 扫雷逻辑
+    let mineRows = 6, mineCols = 6, totalMines = 5;
+    let mineBoard = [], mineTimerInterval = null, mineSeconds = 0;
+
+    function initMinesweeper() {
+      clearInterval(mineTimerInterval);
+      mineSeconds = 0;
+      document.getElementById('mine-timer').innerText = '0';
+      document.getElementById('mine-count').innerText = totalMines;
+      const grid = document.getElementById('mine-grid');
+      grid.innerHTML = '';
+      mineBoard = Array(mineRows * mineCols).fill(0);
+
+      let planted = 0;
+      while (planted < totalMines) {
+        const idx = Math.floor(Math.random() * mineBoard.length);
+        if (mineBoard[idx] !== 'M') {
+          mineBoard[idx] = 'M';
+          planted++;
+        }
+      }
+
+      for (let i = 0; i < mineBoard.length; i++) {
+        if (mineBoard[i] === 'M') continue;
+        const r = Math.floor(i / mineCols), c = i % mineCols;
+        let count = 0;
+        for (let dr = -1; dr <= 1; dr++) {
+          for (let dc = -1; dc <= 1; dc++) {
+            const nr = r + dr, nc = c + dc;
+            if (nr >= 0 && nr < mineRows && nc >= 0 && nc < mineCols) {
+              if (mineBoard[nr * mineCols + nc] === 'M') count++;
+            }
+          }
+        }
+        mineBoard[i] = count;
+      }
+
+      mineBoard.forEach((val, idx) => {
+        const cell = document.createElement('button');
+        cell.className = 'w-6 h-6 bg-slate-700 hover:bg-slate-600 rounded text-[11px] font-bold flex items-center justify-center text-white';
+        cell.onclick = () => revealMineCell(cell, idx);
+        grid.appendChild(cell);
+      });
+
+      mineTimerInterval = setInterval(() => {
+        mineSeconds++;
+        document.getElementById('mine-timer').innerText = mineSeconds;
+      }, 1000);
+    }
+
+    function revealMineCell(cell, idx) {
+      const val = mineBoard[idx];
+      if (val === 'M') {
+        cell.innerHTML = '💥';
+        cell.className = 'w-6 h-6 bg-red-600 rounded text-xs flex items-center justify-center';
+        clearInterval(mineTimerInterval);
+        showToast('💣 踩雷啦！');
+      } else {
+        cell.innerHTML = val > 0 ? val : '';
+        cell.className = 'w-6 h-6 bg-slate-900 rounded text-[11px] font-mono font-bold flex items-center justify-center text-amber-300';
+        cell.disabled = true;
+      }
+    }
+    document.getElementById('btn-reset-mine').onclick = initMinesweeper;
+
+    // 跳跃跑酷逻辑
+    const canvas = document.getElementById('jumpCanvas');
+    const ctx = canvas.getContext('2d');
+    let jumpY = 85, jumpVelocity = 0, isJumping = false, jumpScore = 0, jumpObsX = 260, jumpAnimId = null;
+
+    function startJumpGame() {
+      jumpY = 85;
+      jumpVelocity = 0;
+      jumpScore = 0;
+      jumpObsX = 260;
+      cancelAnimationFrame(jumpAnimId);
+      loopJumpGame();
+    }
+
+    function loopJumpGame() {
+      jumpVelocity += 0.8;
+      jumpY += jumpVelocity;
+      if (jumpY >= 85) { jumpY = 85; isJumping = false; }
+      jumpObsX -= 3;
+      if (jumpObsX <= -15) {
+        jumpObsX = 260;
+        jumpScore += 10;
+        document.getElementById('jump-score').innerText = jumpScore;
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(0, 105, canvas.width, 15);
+      ctx.fillStyle = '#d97724';
+      ctx.beginPath();
+      ctx.arc(40, jumpY + 10, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ef4444';
+      ctx.fillRect(jumpObsX, 85, 12, 20);
+
+      if (jumpObsX < 50 && jumpObsX > 30 && jumpY >= 75) {
+        showToast('💫 撞到障碍啦!');
+        addExp(jumpScore);
+        return;
+      }
+      jumpAnimId = requestAnimationFrame(loopJumpGame);
+    }
+
+    canvas.onclick = () => {
+      if (!isJumping) {
+        jumpVelocity = -8.5;
+        isJumping = true;
+        AudioEngine.playKey();
+      }
+    };
+    document.getElementById('btn-start-jump').onclick = startJumpGame;
+
+    // 11. 鼠标动态穿透与桌面自由贴边拖拽
+    const companionApp = document.getElementById('companion-app');
+    if (electron && electron.ipcRenderer) {
+      companionApp.addEventListener('mouseenter', () => {
+        electron.ipcRenderer.send('set-ignore-mouse-events', false);
+      });
+      companionApp.addEventListener('mouseleave', () => {
+        electron.ipcRenderer.send('set-ignore-mouse-events', true, { forward: true });
+      });
+    }
+
+    const dragHandle = document.getElementById('drag-handle');
+    let isDragging = false, startX, startY, origLeft, origTop;
+
+    dragHandle.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      startX = e.screenX;
+      startY = e.screenY;
+      const rect = companionApp.getBoundingClientRect();
+      origLeft = rect.left;
+      origTop = rect.top;
+      if (electron) electron.ipcRenderer.send('set-ignore-mouse-events', false);
+      e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const dx = e.screenX - startX;
+      const dy = e.screenY - startY;
+
+      const currentWidth = companionApp.offsetWidth || 290;
+      const maxLeft = window.innerWidth - currentWidth;
+      const maxTop = window.innerHeight - 50;
+
+      const newLeft = Math.max(0, Math.min(maxLeft, origLeft + dx));
+      const newTop = Math.max(0, Math.min(maxTop, origTop + dy));
+
+      companionApp.style.bottom = 'auto';
+      companionApp.style.right = 'auto';
+      companionApp.style.left = `${newLeft}px`;
+      companionApp.style.top = `${newTop}px`;
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (isDragging) {
+        isDragging = false;
+        localStorage.setItem('pet_pos_x', companionApp.style.left);
+        localStorage.setItem('pet_pos_y', companionApp.style.top);
+      }
+    });
+
+    // 恢复历史拖拽停靠位置
+    const savedX = localStorage.getItem('pet_pos_x');
+    const savedY = localStorage.getItem('pet_pos_y');
+    if (savedX && savedY) {
+      companionApp.style.bottom = 'auto';
+      companionApp.style.right = 'auto';
+      companionApp.style.left = savedX;
+      companionApp.style.top = savedY;
+    }
+
+    // 12. 清单右下角自由缩放大小逻辑 (Resize)
+    const resizeHandle = document.getElementById('resize-handle');
+    let isResizing = false, rStartX, rStartY, rStartW, rStartH;
+
+    resizeHandle.addEventListener('mousedown', (e) => {
+      isResizing = true;
+      rStartX = e.clientX;
+      rStartY = e.clientY;
+      const rect = deskTodoBoard.getBoundingClientRect();
+      rStartW = rect.width;
+      rStartH = rect.height;
+      e.preventDefault();
+      e.stopPropagation();
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isResizing) return;
+      const nw = Math.max(240, Math.min(480, rStartW + (e.clientX - rStartX)));
+      const nh = Math.max(160, Math.min(520, rStartH + (e.clientY - rStartY)));
+      state.boardWidth = nw;
+      state.boardHeight = nh;
+      deskTodoBoard.style.width = `${nw}px`;
+      deskTodoBoard.style.minHeight = `${nh}px`;
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (isResizing) {
+        isResizing = false;
+        saveState();
+      }
+    });
+
+    // 初始化渲染
+    renderPet(false, false);
+    renderTasks();
+    updateUI();
+  </script>
+</body>
+</html>

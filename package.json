@@ -1,0 +1,33 @@
+{
+  "name": "desktop-pet",
+  "version": "1.0.0",
+  "description": "Desktop Pet and Productivity Companion",
+  "author": "YourName",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "28.3.3",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "node-global-key-listener": "^0.1.1"
+  },
+  "build": {
+    "appId": "com.desktoppet.app",
+    "productName": "DesktopPet",
+    "electronVersion": "28.3.3",
+    "win": {
+      "target": ["zip", "nsis"]
+    },
+    "asarUnpack": [
+      "**/node_modules/node-global-key-listener/bin/**"
+    ],
+    "files": [
+      "**/*",
+      "!**/node_modules/node-global-key-listener/bin/MacKeyServer*"
+    ]
+  }
+}
